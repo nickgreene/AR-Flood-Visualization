@@ -118,6 +118,10 @@ namespace GoogleARCore.Examples.Common
 
             m_MeshRenderer.enabled = true;
 
+            m_MeshRenderer.material.SetTextureOffset("_MainTex", new Vector2((0.3f * Mathf.Sin(Time.time * 0.3f)), (0.2f * Mathf.Cos(Time.time * 0.4f + 0.3f * Mathf.PI))));
+
+            m_MeshRenderer.material.SetTextureOffset("_DetailAlbedoMap", new Vector2(-(0.3f * Mathf.Sin(Time.time * 0.6f * Mathf.PI)), (0.4f * Mathf.Cos(Time.time * 0.6f * Mathf.PI + 0.7f * Mathf.PI))));
+
             _UpdateMeshIfNeeded();
         }
 
@@ -230,6 +234,18 @@ namespace GoogleARCore.Examples.Common
             m_Mesh.SetVertices(m_MeshVertices);
             m_Mesh.SetIndices(m_MeshIndices.ToArray(), MeshTopology.Triangles, 0);
             m_Mesh.SetColors(m_MeshColors);
+
+            Vector3[] vertices = m_Mesh.vertices;
+            Vector2[] uvs = new Vector2[vertices.Length];
+
+            for (int i = 0; i < uvs.Length; i++)
+            {
+                uvs[i] = new Vector2(vertices[i].x, vertices[i].z);
+            }
+            m_Mesh.uv = uvs;
+
+            m_Mesh.RecalculateNormals();
+            m_Mesh.RecalculateTangents();
         }
 
         private bool _AreVerticesListsEqual(List<Vector3> firstList, List<Vector3> secondList)

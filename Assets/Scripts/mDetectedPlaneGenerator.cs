@@ -42,6 +42,8 @@ namespace GoogleARCore.Examples.Common
         /// </summary>
         private List<DetectedPlane> m_NewPlanes = new List<DetectedPlane>();
 
+        private int m_PlaneCount = 0;
+
         /// <summary>
         /// The Unity Update method.
         /// </summary>
@@ -60,8 +62,18 @@ namespace GoogleARCore.Examples.Common
                 // Instantiate a plane visualization prefab and set it to track the new plane. The transform is set to
                 // the origin with an identity rotation since the mesh for our prefab is updated in Unity World
                 // coordinates.
-                GameObject planeObject = Instantiate(WaterPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                planeObject.GetComponent<mWaterPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                if (m_PlaneCount == 0)
+                {
+                    GameObject planeObject = Instantiate(WaterPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                    planeObject.GetComponent<mWaterPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                    m_PlaneCount++;
+                }
+                else
+                {
+                    GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                    planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                    m_PlaneCount++;
+                }
             }
         }
     }
