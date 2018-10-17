@@ -34,6 +34,8 @@ namespace GoogleARCore.Examples.Common
         /// </summary>
         public GameObject DetectedPlanePrefab;
 
+        public GameObject WaterPlanePrefab;
+
         /// <summary>
         /// A list to hold new planes ARCore began tracking in the current frame. This object is used across
         /// the application to avoid per-frame allocations.
@@ -58,8 +60,8 @@ namespace GoogleARCore.Examples.Common
                 // Instantiate a plane visualization prefab and set it to track the new plane. The transform is set to
                 // the origin with an identity rotation since the mesh for our prefab is updated in Unity World
                 // coordinates.
-                GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                GameObject planeObject = Instantiate(WaterPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                planeObject.GetComponent<mWaterPlaneVisualizer>().Initialize(m_NewPlanes[i]);
             }
         }
     }
