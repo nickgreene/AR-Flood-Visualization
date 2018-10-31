@@ -36,13 +36,22 @@ namespace GoogleARCore.Examples.Common
 
         public GameObject WaterPlanePrefab;
 
+        public GameObject VerticalPlanePrefab;
+
         /// <summary>
         /// A list to hold new planes ARCore began tracking in the current frame. This object is used across
         /// the application to avoid per-frame allocations.
         /// </summary>
         private List<DetectedPlane> m_NewPlanes = new List<DetectedPlane>();
 
+        private GameObject m_WaterPlane;
+
         private int m_PlaneCount = 0;
+
+        public void ResetButton()
+        {
+            m_PlaneCount = 0;
+        }
 
         /// <summary>
         /// The Unity Update method.
@@ -55,24 +64,39 @@ namespace GoogleARCore.Examples.Common
                 return;
             }
 
+            Debug.Log(Session.Status.ToString());
+
             // Iterate over planes found in this frame and instantiate corresponding GameObjects to visualize them.
             Session.GetTrackables<DetectedPlane>(m_NewPlanes, TrackableQueryFilter.New);
             for (int i = 0; i < m_NewPlanes.Count; i++)
             {
+
                 // Instantiate a plane visualization prefab and set it to track the new plane. The transform is set to
                 // the origin with an identity rotation since the mesh for our prefab is updated in Unity World
                 // coordinates.
                 if (m_PlaneCount == 0)
                 {
-                    GameObject planeObject = Instantiate(WaterPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                    planeObject.GetComponent<mWaterPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                    m_WaterPlane = Instantiate(WaterPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                    m_WaterPlane.GetComponent<mWaterPlaneVisualizer>().Initialize(m_NewPlanes[i]);
                     m_PlaneCount++;
                 }
                 else
                 {
-                    GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                    planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
-                    m_PlaneCount++;
+                    if (m_NewPlanes[i].PlaneType == DetectedPlaneType.Vertical)
+                    {
+                        GameObject maskObject = Instantiate(VerticalPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                        maskObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+
+                        GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                        planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                        m_PlaneCount++;
+                    }
+                    else
+                    {
+                        GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
+                        planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                        m_PlaneCount++;
+                    }
                 }
             }
         }

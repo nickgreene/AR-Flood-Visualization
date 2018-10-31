@@ -24,6 +24,7 @@ namespace GoogleARCore.Examples.HelloAR
     using GoogleARCore;
     using GoogleARCore.Examples.Common;
     using UnityEngine;
+    using UnityEngine.UI;
 
 #if UNITY_EDITOR
     // Set up touch input propagation while using Instant Preview in the editor.
@@ -60,6 +61,8 @@ namespace GoogleARCore.Examples.HelloAR
         /// </summary>
         public GameObject SearchingForPlaneUI;
 
+        public Text InfoBox;
+
         /// <summary>
         /// The rotation in degrees need to apply to model when the Andy model is placed.
         /// </summary>
@@ -75,6 +78,27 @@ namespace GoogleARCore.Examples.HelloAR
         /// True if the app is in the process of quitting due to an ARCore connection error, otherwise false.
         /// </summary>
         private bool m_IsQuitting = false;
+
+        //for displaying
+        private Slider m_Slider;
+
+        public void _handleSliderChange(float h)
+        {
+            InfoBox.text = "Water Height: " + h + "m";
+        }
+
+        public void Start()
+        {
+            GameObject slider = GameObject.Find("mSlider");
+            if (slider != null)
+            {
+                m_Slider = slider.GetComponent<Slider>();
+                m_Slider.onValueChanged.AddListener(_handleSliderChange);
+            }
+        }
+
+
+
 
         /// <summary>
         /// The Unity Update() method.
@@ -96,6 +120,8 @@ namespace GoogleARCore.Examples.HelloAR
             }
 
             SearchingForPlaneUI.SetActive(showSearchingUI);
+
+            return;
 
             // If the player has not touched the screen, we are done with this update.
             Touch touch;

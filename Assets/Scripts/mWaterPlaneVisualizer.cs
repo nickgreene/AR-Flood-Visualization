@@ -33,6 +33,8 @@ namespace GoogleARCore.Examples.Common
     {
         private Slider m_Slider;
 
+        private Button m_ResetButton;
+
         private static int s_PlaneCount = 0;
 
         private readonly Color[] k_PlaneColors = new Color[]
@@ -69,9 +71,15 @@ namespace GoogleARCore.Examples.Common
 
         private MeshRenderer m_MeshRenderer;
 
+
         public void _handleSliderChange(float h)
         {
             this.transform.position = new Vector3(0, h, 0);
+        }
+
+        public void _handleResetButton()
+        {
+            Destroy(gameObject);
         }
 
         /// <summary>
@@ -85,15 +93,20 @@ namespace GoogleARCore.Examples.Common
 
         public void Start()
         {
-            GameObject result = GameObject.Find("mSlider");
-
-            if (result != null)
+            GameObject slider = GameObject.Find("mSlider");
+            if (slider != null)
             {
-                m_Slider = result.GetComponent<Slider>();
-
+                m_Slider = slider.GetComponent<Slider>();
                 m_Slider.onValueChanged.AddListener(_handleSliderChange);
-
             }
+
+            GameObject reset = GameObject.Find("ResetButton");
+            if (reset != null)
+            {
+                m_ResetButton = reset.GetComponent<Button>();
+                m_ResetButton.onClick.AddListener(_handleResetButton);
+            }
+
         }
 
         /// <summary>
