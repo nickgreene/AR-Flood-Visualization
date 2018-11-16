@@ -64,8 +64,6 @@ namespace GoogleARCore.Examples.Common
                 return;
             }
 
-            Debug.Log(Session.Status.ToString());
-
             // Iterate over planes found in this frame and instantiate corresponding GameObjects to visualize them.
             Session.GetTrackables<DetectedPlane>(m_NewPlanes, TrackableQueryFilter.New);
             for (int i = 0; i < m_NewPlanes.Count; i++)
@@ -85,7 +83,7 @@ namespace GoogleARCore.Examples.Common
                     if (m_NewPlanes[i].PlaneType == DetectedPlaneType.Vertical)
                     {
                         GameObject maskObject = Instantiate(VerticalPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                        maskObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                        maskObject.GetComponent<mVerticalPlaneVisualizer>().Initialize(m_NewPlanes[i]);
 
                         GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
                         planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);

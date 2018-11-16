@@ -96,8 +96,13 @@ namespace GoogleARCore.Examples.Common
             GameObject slider = GameObject.Find("mSlider");
             if (slider != null)
             {
+                Debug.Log("slider found");
                 m_Slider = slider.GetComponent<Slider>();
                 m_Slider.onValueChanged.AddListener(_handleSliderChange);
+            }
+            else
+            {
+                Debug.Log("slider not found");
             }
 
             GameObject reset = GameObject.Find("ResetButton");
