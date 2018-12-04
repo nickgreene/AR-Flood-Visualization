@@ -23,6 +23,7 @@ namespace GoogleARCore.Examples.Common
     using System.Collections.Generic;
     using GoogleARCore;
     using UnityEngine;
+	using UnityEngine.UI;
 
     /// <summary>
     /// Visualizes a single DetectedPlane in the Unity scene.
@@ -57,29 +58,65 @@ namespace GoogleARCore.Examples.Common
         // Keep previous frame's mesh polygon to avoid mesh update every frame.
         private List<Vector3> m_PreviousFrameMeshVertices = new List<Vector3>();
         private List<Vector3> m_MeshVertices = new List<Vector3>();
+        private List<Vector3> m_CollisionVerts = new List<Vector3>();
+
+
         private Vector3 m_PlaneCenter = new Vector3();
+		private Vector3 m_PlaneNormal = Vector3.zero;
 
         private List<Color> m_MeshColors = new List<Color>();
 
         private List<int> m_MeshIndices = new List<int>();
+		private List<int> m_CollisionIndices = new List<int>();
 
-        private Mesh m_Mesh;
 
-        private MeshRenderer m_MeshRenderer;
+		private Mesh m_Mesh;
+		private Mesh m_CollisionMesh;
 
-        private float[] max_bounds = { float.NegativeInfinity, float.PositiveInfinity, float.NegativeInfinity,
-                                       float.PositiveInfinity};
-        /// <summary>
-        /// The Unity Awake() method.
-        /// </summary>
-        public void Awake()
+
+		private MeshRenderer m_MeshRenderer;
+
+        private float collisionTolerance = 0.08f;
+
+		private Vector3 collisionBoundRight = Vector3.zero;
+		private Vector3 collisionBoundLeft = Vector3.zero;
+
+		private bool collisionOnRight = false;
+		private bool collisionOnLeft = false;
+
+		private RaycastHit[] hits;
+
+		private Button m_ClipButton;
+
+		private bool shouldClip = true;
+
+		private int m_id = -1;
+
+
+
+		//private float[] max_bounds = { float.NegativeInfinity, float.PositiveInfinity, float.NegativeInfinity,
+		//                               float.PositiveInfinity};
+
+
+		/// <summary>
+		/// The Unity Awake() method.
+		/// </summary>
+		public void Awake()
         {
             m_Mesh = GetComponent<MeshFilter>().mesh;
             m_MeshRenderer = GetComponent<UnityEngine.MeshRenderer>();
+
             m_MeshCollider = GetComponent<MeshCollider>();
             m_MeshCollider.sharedMesh = m_Mesh;
 
-        }
+			GameObject clip = GameObject.Find("ClipButton");
+			if (clip != null)
+			{
+				m_ClipButton = clip.GetComponent<Button>();
+				m_ClipButton.onClick.AddListener(_handleToggleClip);
+			}
+
+		}
 
         /// <summary>
         /// The Unity Update() method.
@@ -110,11 +147,21 @@ namespace GoogleARCore.Examples.Common
         /// Initializes the DetectedPlaneVisualizer with a DetectedPlane.
         /// </summary>
         /// <param name="plane">The plane to vizualize.</param>
-        public void Initialize(DetectedPlane plane)
+        public void Initialize(DetectedPlane plane, int id)
         {
+			m_id = id;
+
             m_DetectedPlane = plane;
-            m_MeshRenderer.material.SetColor("_GridColor", k_PlaneColors[s_PlaneCount++ % k_PlaneColors.Length]);
-            m_MeshRenderer.material.SetFloat("_UvRotation", Random.Range(0.0f, 360.0f));
+				
+			Color planeColor = (k_PlaneColors[s_PlaneCount++ % k_PlaneColors.Length]);
+
+			m_MeshRenderer.material.SetColor("_GridColor", planeColor);
+
+
+			Debug.Log("NEW PLANE! ID: " + m_id.ToString() + " COLOR: " + planeColor);
+
+
+			m_MeshRenderer.material.SetFloat("_UvRotation", Random.Range(0.0f, 360.0f));
 
             Update();
         }
@@ -122,17 +169,17 @@ namespace GoogleARCore.Examples.Common
         /// <summary>
         /// Update mesh with a list of Vector3 and plane's center position.
         /// </summary>
-        private void _UpdateMeshIfNeeded()
+        private void _UpdateMeshIfNeeded(bool forceUpdate = false)
         {
             m_DetectedPlane.GetBoundaryPolygon(m_MeshVertices);
 
-
-            if (_AreVerticesListsEqual(m_PreviousFrameMeshVertices, m_MeshVertices))
-            {
-                return;
-            }
-
-
+			if (!forceUpdate)
+			{
+				if (_AreVerticesListsEqual(m_PreviousFrameMeshVertices, m_MeshVertices))
+				{
+					return;
+				}
+			}
 
 
             m_PreviousFrameMeshVertices.Clear();
@@ -142,7 +189,160 @@ namespace GoogleARCore.Examples.Common
 
             Vector3 planeNormal = m_DetectedPlane.CenterPose.rotation * Vector3.up;
 
+			m_PlaneNormal = planeNormal;
+
             m_MeshRenderer.material.SetVector("_PlaneNormal", planeNormal);
+
+            Vector3 planeRight = Vector3.Cross(Vector3.down, planeNormal);
+
+			planeRight.Normalize();
+
+
+            float maxY = float.NegativeInfinity;
+            float minY = float.PositiveInfinity;
+
+            float maxDot = float.NegativeInfinity;
+            Vector3 maxRight = Vector3.zero;
+            Vector3 colMaxRight = Vector3.zero;
+
+            float minDot = float.PositiveInfinity;
+            Vector3 minRight = Vector3.zero;
+            Vector3 colMinRight = Vector3.zero;
+
+
+            float dot;
+
+
+
+
+
+            // finding bounding box
+            for (int i = 0; i < m_MeshVertices.Count; i++)
+            {
+                minY = Mathf.Min(minY, m_MeshVertices[i].y);
+                maxY = Mathf.Max(maxY, m_MeshVertices[i].y);
+
+                dot = Vector3.Dot(planeRight, m_MeshVertices[i] - m_PlaneCenter);
+
+                if (dot > maxDot)
+                {
+                    maxDot = dot;
+                    maxRight = m_MeshVertices[i];
+                }
+                if (dot < minDot) 
+                {
+                    minDot = dot;
+                    minRight = m_MeshVertices[i];
+                }
+
+            }
+
+			colMaxRight = ((maxRight - m_PlaneCenter).normalized * (Mathf.Abs(maxDot) + collisionTolerance)) + m_PlaneCenter;
+			colMinRight = ((minRight - m_PlaneCenter).normalized * (Mathf.Abs(minDot) + collisionTolerance)) + m_PlaneCenter;
+
+
+			if (!collisionOnRight)
+			{
+				hits = Physics.RaycastAll(m_PlaneCenter, planeRight, 100.0F);
+				Debug.DrawRay(m_PlaneCenter, planeRight * 100f, Color.red, 1000, false);
+
+				for (int i = 0; i < hits.Length; i++)
+				{
+					RaycastHit hit = hits[i];
+
+					if (hit.transform.gameObject != this.gameObject)
+					{
+						if (hit.transform.gameObject.name == "mVerticalPlaneVisualizer(Clone)")
+						{
+
+							mVerticalPlaneVisualizer other = (mVerticalPlaneVisualizer)hit.transform.gameObject.GetComponent(typeof(mVerticalPlaneVisualizer));
+
+							Vector3 intersect = hitPointOnPlaneIntersect(m_PlaneCenter, m_PlaneNormal, other.m_PlaneCenter, other.m_PlaneNormal, hit.point);
+
+							if (intersect != Vector3.zero)
+							{
+								float intersect_distance = PointLineDistance(hit.point, Vector3.up, maxRight);
+
+
+								if (intersect_distance < collisionTolerance)
+								{
+									Debug.Log("Right intersect Distance: " + intersect_distance.ToString());
+
+
+									collisionBoundRight = hit.point;
+
+									collisionOnRight = true;
+									Debug.Log("HIT RIGHT " + m_id.ToString());
+									other.handleIncomingRayCast(hit.point);
+
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if (!collisionOnLeft)
+			{
+				hits = Physics.RaycastAll(m_PlaneCenter, -planeRight, 100.0F);
+
+				Debug.DrawRay(m_PlaneCenter, -planeRight * 100f, Color.magenta, 1000, false);
+
+
+				for (int i = 0; i < hits.Length; i++)
+				{
+					RaycastHit hit = hits[i];
+
+					if (hit.transform.gameObject != this.gameObject)
+					{
+
+						if (hit.transform.gameObject.name == "mVerticalPlaneVisualizer(Clone)")
+						{
+
+							mVerticalPlaneVisualizer other = (mVerticalPlaneVisualizer)hit.transform.gameObject.GetComponent(typeof(mVerticalPlaneVisualizer));
+							Vector3 intersect = hitPointOnPlaneIntersect(m_PlaneCenter, m_PlaneNormal, other.m_PlaneCenter, other.m_PlaneNormal, hit.point);
+
+							if (intersect != Vector3.zero)
+							{
+							
+								float intersect_distance = PointLineDistance(hit.point, Vector3.up, minRight);
+
+
+								if (intersect_distance < collisionTolerance)
+								{
+									Debug.Log("Left intersect Distance: " + intersect_distance.ToString());
+
+
+									collisionBoundLeft = hit.point;
+									collisionOnLeft = true;
+									Debug.Log("HIT LEFT " + m_id.ToString());
+
+									other.handleIncomingRayCast(hit.point);
+
+								}
+							}
+						}
+					}
+				}
+			}
+
+
+
+			if (shouldClip)
+			{
+				if (collisionOnRight)
+				{
+					maxDot = Vector3.Dot(planeRight, collisionBoundRight - m_PlaneCenter);
+					maxRight = ((planeRight).normalized * (Mathf.Abs(maxDot) )) + m_PlaneCenter;
+				}
+
+				if (collisionOnLeft)
+				{
+					minDot = Vector3.Dot(planeRight, collisionBoundLeft - m_PlaneCenter);
+					minRight = ((-planeRight).normalized * (Mathf.Abs(minDot))) + m_PlaneCenter;
+				}
+			}
+
 
 
 
@@ -158,216 +358,81 @@ namespace GoogleARCore.Examples.Common
             // |             |      | |         | |
             // |             |      |7-----------6|
             // ---------------     3---------------2
-            m_MeshColors.Clear();
-
-            //// Fill transparent color to vertices 0 to 3.
-            //for (int i = 0; i < planePolygonCount; ++i)
-            //{
-            //    m_MeshColors.Add(Color.clear);
-            //}
-
-            //// Feather distance 0.2 meters.
-            //const float featherLength = 0.2f;
-
-            //// Feather scale over the distance between plane center and vertices.
-            //const float featherScale = 0.2f;
-
-            //// Add vertex 4 to 7.
-            //for (int i = 0; i < planePolygonCount; ++i)
-            //{
-            //    Vector3 v = m_MeshVertices[i];
-
-            //    // Vector from plane center to current point
-            //    Vector3 d = v - m_PlaneCenter;
-
-            //    float scale = 1.0f - Mathf.Min(featherLength / d.magnitude, featherScale);
-            //    m_MeshVertices.Add((scale * d) + m_PlaneCenter);
-
-            //    m_MeshColors.Add(Color.white);
-            //}
-
-            float max_z = float.NegativeInfinity;
-            float min_z = float.PositiveInfinity;
-            float max_x = float.NegativeInfinity;
-            float min_x = float.PositiveInfinity;
-            float max_y = float.NegativeInfinity;
-            float min_y = float.PositiveInfinity;
 
 
-            for (int i = 0; i < m_MeshVertices.Count; i++)
-            { 
-                max_x = Mathf.Max(m_MeshVertices[i].x, max_x);
-                min_x = Mathf.Min(m_MeshVertices[i].x, min_x);
-                max_y = Mathf.Max(m_MeshVertices[i].y, max_y);
-                min_y = Mathf.Min(m_MeshVertices[i].y, min_y);
-                max_z = Mathf.Max(m_MeshVertices[i].z, max_z);
-                min_z = Mathf.Min(m_MeshVertices[i].z, min_z);
-            }
 
-
-            Vector3 cp = Vector3.Cross(Vector3.up, planeNormal);
-            cp.Normalize();
-
-            min_x = Mathf.Max(min_x, max_bounds[0]);
-            max_x = Mathf.Min(max_x, max_bounds[1]);
-            min_z = Mathf.Max(min_z, max_bounds[2]);
-            max_z = Mathf.Min(max_z, max_bounds[3]);
 
             m_MeshVertices.Clear();
-
-            if (cp.x < 0 && cp.z < 0 )
-            {
-                min_x = Mathf.Max(min_x, max_bounds[0]);
-                max_x = Mathf.Min(max_x, max_bounds[1]);
-                min_z = Mathf.Max(min_z, max_bounds[2]);
-                max_z = Mathf.Min(max_z, max_bounds[3]);
+			m_CollisionVerts.Clear();
+            m_MeshColors.Clear();
 
 
-                m_MeshVertices.Add(new Vector3(min_x, min_y, min_z));
-                m_MeshVertices.Add(new Vector3(min_x, max_y, min_z));
-                m_MeshVertices.Add(new Vector3(max_x, max_y, max_z));
-                m_MeshVertices.Add(new Vector3(max_x, min_y, max_z));
-            }
-            else if (cp.x < 0 && cp.z > 0)
-            { 
-                min_x = Mathf.Max(min_x, max_bounds[0]);
-                max_x = Mathf.Min(max_x, max_bounds[1]);
-                max_z = Mathf.Max(min_z, max_bounds[2]);
-                min_z = Mathf.Min(max_z, max_bounds[3]);
-            
-                m_MeshVertices.Add(new Vector3(min_x, min_y, max_z));
-                m_MeshVertices.Add(new Vector3(min_x, max_y, max_z));
-                m_MeshVertices.Add(new Vector3(max_x, max_y, min_z));
-                m_MeshVertices.Add(new Vector3(max_x, min_y, min_z));
+            //bottomLeft
+            m_MeshVertices.Add(new Vector3(minRight.x, minY, minRight.z));
+            m_CollisionVerts.Add(new Vector3(colMinRight.x, minY, colMinRight.z));
 
-            }
-            else if (cp.x > 0 && cp.z < 0)
-            {
-                max_x = Mathf.Max(min_x, max_bounds[0]);
-                min_x = Mathf.Min(max_x, max_bounds[1]);
-                min_z = Mathf.Max(min_z, max_bounds[2]);
-                max_z = Mathf.Min(max_z, max_bounds[3]);
+            //topLeft
+            m_MeshVertices.Add(new Vector3(minRight.x, maxY, minRight.z));
+			m_CollisionVerts.Add(new Vector3(colMinRight.x, maxY, colMinRight.z));
 
-                m_MeshVertices.Add(new Vector3(max_x, min_y, min_z));
-                m_MeshVertices.Add(new Vector3(max_x, max_y, min_z));
-                m_MeshVertices.Add(new Vector3(min_x, max_y, max_z));
-                m_MeshVertices.Add(new Vector3(min_x, min_y, max_z));
-            }
-            else
-            {
+            //topRight
+            m_MeshVertices.Add(new Vector3(maxRight.x, maxY, maxRight.z));
+			m_CollisionVerts.Add(new Vector3(colMaxRight.x, maxY, colMaxRight.z));
 
-                max_x = Mathf.Max(min_x, max_bounds[0]);
-                min_x = Mathf.Min(max_x, max_bounds[1]);
-                max_z = Mathf.Max(min_z, max_bounds[2]);
-                min_z = Mathf.Min(max_z, max_bounds[3]);
-
-                m_MeshVertices.Add(new Vector3(max_x, min_y, max_z));
-                m_MeshVertices.Add(new Vector3(max_x, max_y, max_z));
-                m_MeshVertices.Add(new Vector3(min_x, max_y, min_z));
-                m_MeshVertices.Add(new Vector3(min_x, min_y, min_z));
-            }
+            //bottomRight
+            m_MeshVertices.Add(new Vector3(maxRight.x, minY, maxRight.z));
+			m_CollisionVerts.Add(new Vector3(colMaxRight.x, minY, colMaxRight.z));
+			
 
 
-
-
+            m_MeshColors.Add(Color.red);
+            m_MeshColors.Add(Color.green);
+            m_MeshColors.Add(Color.blue);
+            m_MeshColors.Add(Color.magenta);
 
 
             m_MeshIndices.Clear();
 
-
-            m_MeshIndices.Add(0);
+			m_MeshIndices.Add(0);
             m_MeshIndices.Add(1);
             m_MeshIndices.Add(2);
             m_MeshIndices.Add(2);
             m_MeshIndices.Add(3);
             m_MeshIndices.Add(0);
 
-            //int firstOuterVertex = 0;
-            // int centerVertex = planePolygonCount;
-
-            // Generate triangle (0, 1, c) and (1, 2, c).
-            //  for (int i = 0; i < planePolygonCount; ++i)
-            //{
-            //   m_MeshIndices.Add(i);
-            // m_MeshIndices.Add((i + 1) % planePolygonCount);
-            // m_MeshIndices.Add(centerVertex);
-            //}
-
-            //// Generate triangle (0, 1, 4), (4, 1, 5), (5, 1, 2), (5, 2, 6), (6, 2, 3), (6, 3, 7)
-            //// (7, 3, 0), (7, 0, 4)
-            //for (int i = 0; i < planePolygonCount; ++i)
-            //{
-            //    int outerVertex1 = firstOuterVertex + i;
-            //    int outerVertex2 = firstOuterVertex + ((i + 1) % planePolygonCount);
-            //    int innerVertex1 = firstInnerVertex + i;
-            //    int innerVertex2 = firstInnerVertex + ((i + 1) % planePolygonCount);
-
-            //    m_MeshIndices.Add(outerVertex1);
-            //    m_MeshIndices.Add(outerVertex2);
-            //    m_MeshIndices.Add(innerVertex1);
-
-            //    m_MeshIndices.Add(innerVertex1);
-            //    m_MeshIndices.Add(outerVertex2);
-            //    m_MeshIndices.Add(innerVertex2);
-            //}
-
+           
             m_Mesh.Clear();
             m_Mesh.SetVertices(m_MeshVertices);
             m_Mesh.SetIndices(m_MeshIndices.ToArray(), MeshTopology.Triangles, 0);
+            m_Mesh.SetColors(m_MeshColors);
 
-            m_MeshCollider.sharedMesh = m_Mesh;
-            //  m_Mesh.SetColors(m_MeshColors);
+			m_CollisionIndices.Clear();
 
-            RaycastHit[] hits;
-            hits = Physics.RaycastAll(m_PlaneCenter, cp, 100.0F);
+			m_CollisionIndices.Add(0);
+			m_CollisionIndices.Add(1);
+			m_CollisionIndices.Add(2);
 
-            for (int i = 0; i < hits.Length; i++)
-            {
-                //RaycastHit hit = hits[i];
-                //Renderer rend = hit.transform.GetComponent<Renderer>();
-                Debug.Log("HIT 1");
-                if (cp.x < 0)
-                {
-                    max_bounds[0] = hits[i].point.x;
-                } else
-                {
-                    max_bounds[1] = hits[i].point.x;
-                }
-                if (cp.z < 0)
-                {
-                    max_bounds[2] = hits[i].point.z;
-                }
-                else
-                {
-                    max_bounds[3] = hits[i].point.z;
-                }
+			m_CollisionIndices.Add(2);
+			m_CollisionIndices.Add(3);
+			m_CollisionIndices.Add(0);
 
-            }
+			m_CollisionIndices.Add(0);
+			m_CollisionIndices.Add(2);
+			m_CollisionIndices.Add(1);
 
-            hits = Physics.RaycastAll(m_PlaneCenter, -cp, 100.0F);
+			m_CollisionIndices.Add(0);
+			m_CollisionIndices.Add(3);
+			m_CollisionIndices.Add(2);
 
-            for (int i = 0; i < hits.Length; i++)
-            {
-                //RaycastHit hit = hits[i];
-                //Renderer rend = hit.transform.GetComponent<Renderer>();
-                Debug.Log("HIT 2");
-                if (cp.x < 0)
-                {
-                    max_bounds[0] = hits[i].point.x;
-                }
-                else
-                {
-                    max_bounds[1] = hits[i].point.x;
-                }
-                if (cp.z < 0)
-                {
-                    max_bounds[2] = hits[i].point.z;
-                }
-                else
-                {
-                    max_bounds[3] = hits[i].point.z;
-                }
-            }
+			Mesh m_CollisionMesh = new Mesh();
+			m_CollisionMesh.SetVertices(m_CollisionVerts);
+			m_CollisionMesh.SetIndices(m_CollisionIndices.ToArray(), MeshTopology.Triangles, 0);
+
+			m_MeshCollider.sharedMesh = null;
+
+			m_MeshCollider.sharedMesh = m_CollisionMesh;
+
+			m_MeshCollider.enabled = true;
 
         }
 
@@ -390,9 +455,90 @@ namespace GoogleARCore.Examples.Common
             return true;
         }
 
-        private void OnCollisionEnter(Collision c)
+        public void handleIncomingRayCast(Vector3 hitPose)
         {
-            Debug.Log("Collision");
-        }
+			m_PlaneCenter = m_DetectedPlane.CenterPose.position;
+
+			Vector3 planeRight = Vector3.Cross(Vector3.down, m_PlaneNormal);
+
+			Debug.DrawRay(hitPose, Vector3.up * 100, Color.yellow, 1000, false);
+
+			//Debug.DrawRay(m_PlaneCenter, m_PlaneNormal * 100, Color.cyan, 1000, false);
+
+			if ((Vector3.Dot(planeRight, hitPose - m_PlaneCenter) > 0) && !collisionOnRight)
+			{
+				collisionBoundRight = hitPose;
+				collisionOnRight = true;
+				Debug.Log("INCOMING HIT on RIGHT " + m_id );
+
+				_UpdateMeshIfNeeded(true);
+			}
+			else if ((Vector3.Dot(planeRight, hitPose - m_PlaneCenter) < 0) && !collisionOnLeft)
+			{ 
+				collisionBoundLeft = hitPose;
+				collisionOnLeft = true;
+				Debug.Log("INCOMING HIT on LEFT " + m_id );
+
+				_UpdateMeshIfNeeded(true);
+
+			}
+
+
+		}
+
+		private void _handleToggleClip()
+		{
+			shouldClip = !shouldClip;
+			Debug.Log("should clip?: " + shouldClip.ToString());
+			_UpdateMeshIfNeeded(true);
+		}
+
+
+		private Vector3 hitPointOnPlaneIntersect(Vector3 p1_pose, Vector3 p1_normal, Vector3 p2_pose, Vector3 p2_normal, Vector3 hit_pose)
+		{
+			Vector3 p3_normal = Vector3.Cross(p1_normal, p2_normal);
+			float det = p3_normal.sqrMagnitude;
+
+			// If the determinant is 0, that means parallel planes, no intersection.
+			// note: you may want to check against an epsilon value here.
+			if (det != 0.0f)
+			{
+				float p1_d = -1 * Vector3.Dot(p1_pose, p1_normal);
+				float p2_d = -1 * Vector3.Dot(p2_pose, p2_normal);
+
+				// calculate the final (point, normal)
+				Vector3 r_pose = ((Vector3.Cross(p3_normal, p2_normal) * p1_d) +
+						   (Vector3.Cross(p1_normal, p3_normal) * p2_d)) / det;
+
+				Vector3 r_normal = p3_normal;
+
+				//Debug.Log("Unity Hit Pose: " + hit_pose.ToString() + ",  Calculated hit pose: " + r_pose.ToString());
+
+				Debug.DrawRay(hit_pose, Vector3.down * 100f, Color.blue, 1000, false);
+
+				float distance = PointLineDistance(hit_pose, r_normal, r_pose);
+
+				if (distance < 0.05f)
+				{
+
+					return r_pose;
+				}
+				else
+				{
+					return Vector3.zero;
+				}
+
+			}
+
+			else
+			{
+				return Vector3.zero;
+			}
+		}
+
+		private float PointLineDistance(Vector3 point, Vector3 line_d, Vector3 line_p)
+		{
+			return ((Vector3.Cross(line_d, line_p - point).magnitude) / line_d.magnitude);
+		}
     }
 }

@@ -83,7 +83,7 @@ namespace GoogleARCore.Examples.Common
                     if (m_NewPlanes[i].PlaneType == DetectedPlaneType.Vertical)
                     {
                         GameObject maskObject = Instantiate(VerticalPlanePrefab, Vector3.zero, Quaternion.identity, transform);
-                        maskObject.GetComponent<mVerticalPlaneVisualizer>().Initialize(m_NewPlanes[i]);
+                        maskObject.GetComponent<mVerticalPlaneVisualizer>().Initialize(m_NewPlanes[i], m_PlaneCount);
 
                         GameObject planeObject = Instantiate(DetectedPlanePrefab, Vector3.zero, Quaternion.identity, transform);
                         planeObject.GetComponent<mDetectedPlaneVisualizer>().Initialize(m_NewPlanes[i]);
